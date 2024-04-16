@@ -63,6 +63,8 @@ public:
 
     std::string GetFontPath();
 
+    float GetFontSize();
+
     std::string GetModulePath();
 
 };

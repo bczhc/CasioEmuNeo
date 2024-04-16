@@ -109,4 +109,10 @@ ImFontGlyphRangesBuilder& EmuConfig::GetAtlas(){
     return fbuilder;
 }
 
+float EmuConfig::GetFontSize() {
+    if (!root.has("settings") || !root["settings"].has("font-size"))
+        return 18.0;
+    return std::stof(root["settings"]["font-size"]);
+}
+
 EmuConfig EmuGloConfig("config.ini");
