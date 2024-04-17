@@ -16,7 +16,6 @@
 #include <mutex>
 #include <atomic>
 #include <condition_variable>
-#include <filesystem>
 
 #include "Emulator.hpp"
 #include "Logger.hpp"
@@ -29,10 +28,13 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+
 #include <unistd.h>
 #include <csignal>
 
 static bool abort_flag = false;
+
+void StartMemSpansConfigWatcherThread(const std::string &path);
 
 using namespace casioemu;
 // #define DEBUG
@@ -105,28 +107,8 @@ int main(int argc, char *argv[])
 		// Note: argv_map must be destructed after emulator.
 
         // start colored spans file watcher thread
-        std::thread t1([&] {
-            auto colored_spans_file = emulator.GetModelFilePath("mem-spans.txt");
-
-            auto last_mtime = 0L;
-            while (true) {
-                if (std::filesystem::exists(colored_spans_file)) {
-                    auto timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
-                            std::filesystem::last_write_time(colored_spans_file).time_since_epoch()
-                    ).count();
-
-                    if (timestamp != last_mtime) {
-                        // update data
-                        DebugUi::UpdateMarkedSpans(casioemu::parseColoredSpansConfig(colored_spans_file));
-                        last_mtime = timestamp;
-                    }
-                } else {
-                    DebugUi::UpdateMarkedSpans({});
-                }
-                sleep(1 /* 1s */);
-            }
-        });
-        t1.detach();
+    	auto colored_spans_file = emulator.GetModelFilePath("mem-spans.txt");
+        StartMemSpansConfigWatcherThread(colored_spans_file);
 
 		// Used to signal to the console input thread when to stop.
 		static std::atomic<bool> running(true);
@@ -275,4 +257,32 @@ int main(int argc, char *argv[])
 	}
 
 	return 0;
+}
+
+#define MEM_SPANS_CONFIG_POLLING_INTERVAL 1 /* seconds */
+void StartMemSpansConfigWatcherThread(const std::string &path) {
+    std::thread([&]() {
+        uint64_t last_mtime{};
+        // Currently we just use this naive file modification watcher (periodically polling method).
+        // There are platform-dependent methods (like inotify on *nix)
+        // but they're more efficient for folders/bunch of files; if just for a single file,
+        // the performance impact can be considered *negligible*.
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "EndlessLoop"
+        // loop during the whole program lifetime
+        while (true) {
+            if (FileSystem::exists(path)) {
+                auto mtime = FileSystem::mtime_ms(path);
+                if (mtime != last_mtime) {
+                    DebugUi::UpdateMarkedSpans(casioemu::ParseColoredSpansConfig(path));
+                    last_mtime = mtime;
+                }
+            } else {
+                DebugUi::UpdateMarkedSpans({});
+                last_mtime = 0L;
+            }
+            sleep(MEM_SPANS_CONFIG_POLLING_INTERVAL);
+        }
+#pragma clang diagnostic pop
+    }).detach();
 }
