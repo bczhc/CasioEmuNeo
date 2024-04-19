@@ -11,6 +11,7 @@
 #include <iostream>
 #include <iterator>
 #include <ostream>
+#include <ratio>
 #include <thread>
 #include <string>
 #include <map>
@@ -162,27 +163,24 @@ int main(int argc, char *argv[])
 		// 	}
 		// });
 		DebugUi ui;
-		float m_DeltaTime;
-		Uint64 m_StartTime;
-		Uint64 m_PreFrameTime;
-		m_StartTime = SDL_GetPerformanceCounter();
-		m_PreFrameTime = m_StartTime;
+
 		std::thread uit([&]{
 			while (true) {
 				ui.PaintUi();
+				ui.PaintSDL();
 				std::this_thread::sleep_for(std::chrono::milliseconds(16));
 			}
 			
 		});
 		uit.detach();
+		
 		while (emulator.Running())
 		{
-			//ui.PaintUi();
 			//std::cout<<SDL_GetMouseFocus()<<","<<emulator.window<<std::endl;
 			SDL_Event event;
 			if (!SDL_PollEvent(&event))
 				continue;
-				
+			// ui.PaintSDL();
             if (abort_flag) {
                 abort_flag = false;
                 SDL_Event ev_exit;
@@ -209,7 +207,7 @@ int main(int argc, char *argv[])
 				break;
 
 			case SDL_WINDOWEVENT:
-				
+				ui.PaintSDL();
 				switch (event.window.event)
 				{
 				case SDL_WINDOWEVENT_CLOSE:
@@ -222,7 +220,8 @@ int main(int argc, char *argv[])
 					 	// send resized event, but some still does (such as xmonad)
 					 	break;
 					 }
-					ImGui_ImplSDL2_ProcessEvent(&event);
+					
+					//ImGui_ImplSDL2_ProcessEvent(&event);
 					if(event.window.windowID == SDL_GetWindowID(emulator.window)){
 					emulator.WindowResize(event.window.data1, event.window.data2);
 					}
@@ -250,17 +249,7 @@ int main(int argc, char *argv[])
 				break;
 			}
 			
-			Uint64 currTime = SDL_GetPerformanceCounter();
-			m_DeltaTime = (currTime - m_PreFrameTime) / (float)SDL_GetPerformanceFrequency();
-			m_PreFrameTime = currTime;
-			float totalTime = (currTime - m_StartTime) / (float)SDL_GetPerformanceFrequency();
-			float FPS = 1.0f / m_DeltaTime;
-			//SDL_LogInfo(0, "totalTime: %f\tdt: %f\tFPS: %f\n", totalTime, m_DeltaTime, FPS);
 
-			// 限制帧率
-			int MaxFPS = 120;
-			// if (m_DeltaTime < 1.0f / MaxFPS * 1000.0f)
-			// 	SDL_Delay(Uint32(floor(1.0 / MaxFPS * 1000.0 - m_DeltaTime)));
 		
 		}
 		
