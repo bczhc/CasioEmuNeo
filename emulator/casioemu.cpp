@@ -306,11 +306,27 @@ void StartMemSpansConfigWatcherThread(const std::string &path) {
 void StartMemDumpingThread(Emulator &emulator) {
     std::thread([&]() {
         std::fstream out("mem", std::ios::binary | std::ios::out);
+        std::fstream out_text("mem.txt", std::ios::binary | std::ios::out);
+        auto ram = BatteryBackedRAM::rom_addr;
         while (true) {
-            auto ram = BatteryBackedRAM::rom_addr;
             out.seekp(0, std::ios::beg);
             out.write(ram, MEM_EDIT_MEM_SIZE);
             out.flush();
+
+            out_text.seekp(0, std::ios::beg);
+            for (size_t i = 0; i < MEM_EDIT_MEM_SIZE; ++i) {
+                char hex[3];
+                sprintf(hex, "%02X", ram[i]);
+                hex[2] = ' ';
+                out_text.write(hex, 3);
+                if ((i + 1) % 8 == 0) {
+                    out_text.write(" ", 1);
+                    if ((i + 1) % 16 == 0) {
+                        out_text.write("\n", 1);
+                    }
+                }
+            }
+            out_text.flush();
 
             sleep(1);
         }
