@@ -9,18 +9,17 @@
 #include <SDL_image.h>
 #include <cstdint>
 #include <iostream>
-#include <iterator>
+#include <fstream>
 #include <ostream>
-#include <ratio>
 #include <thread>
 #include <string>
 #include <map>
 #include <mutex>
 #include <atomic>
-#include <condition_variable>
 
 #include "Emulator.hpp"
 #include "Logger.hpp"
+#include "Peripheral/BatteryBackedRAM.hpp"
 #include "Data/EventCode.hpp"
 #include "SDL_events.h"
 #include "SDL_keyboard.h"
@@ -36,9 +35,12 @@
 
 static bool abort_flag = false;
 
+using namespace casioemu;
+
 void StartMemSpansConfigWatcherThread(const std::string &path);
 
-using namespace casioemu;
+void StartMemDumpingThread(casioemu::Emulator &emulator);
+
 // #define DEBUG
 int main(int argc, char *argv[])
 {
@@ -91,7 +93,7 @@ int main(int argc, char *argv[])
 
 	if (!history_filename.empty())
 	{
-		
+
 	}
 
     for (auto s: {SIGTERM, SIGINT}) {
@@ -105,12 +107,13 @@ int main(int argc, char *argv[])
 	// 	;
 	{
 		Emulator emulator(argv_map);
-		
+
 		// Note: argv_map must be destructed after emulator.
 
         // start colored spans file watcher thread
     	auto colored_spans_file = emulator.GetModelFilePath("mem-spans.txt");
         StartMemSpansConfigWatcherThread(colored_spans_file);
+        StartMemDumpingThread(emulator);
 
 		// Used to signal to the console input thread when to stop.
 		static std::atomic<bool> running(true);
@@ -170,10 +173,10 @@ int main(int argc, char *argv[])
 				ui.PaintSDL();
 				std::this_thread::sleep_for(std::chrono::milliseconds(16));
 			}
-			
+
 		});
 		uit.detach();
-		
+
 		while (emulator.Running())
 		{
 			//std::cout<<SDL_GetMouseFocus()<<","<<emulator.window<<std::endl;
@@ -197,7 +200,7 @@ int main(int argc, char *argv[])
 				{
 				case CE_FRAME_REQUEST:
 					emulator.Frame();
-					
+
 					break;
 				case CE_EMU_STOPPED:
 					if (emulator.Running())
@@ -220,7 +223,7 @@ int main(int argc, char *argv[])
 					 	// send resized event, but some still does (such as xmonad)
 					 	break;
 					 }
-					
+
 					//ImGui_ImplSDL2_ProcessEvent(&event);
 					if(event.window.windowID == SDL_GetWindowID(emulator.window)){
 					emulator.WindowResize(event.window.data1, event.window.data2);
@@ -245,28 +248,28 @@ int main(int argc, char *argv[])
 					break;
 				}
 				emulator.UIEvent(event);
-				
+
 				break;
 			}
-			
 
-		
+
+
 		}
-		
+
 		running = false;
 
-		
+
 		//console_input_thread.join();
 	}
 
 	std::cout << '\n';
-	
+
 	IMG_Quit();
 	SDL_Quit();
-	
+
 	if (!history_filename.empty())
 	{
-		
+
 	}
 
 	return 0;
@@ -297,5 +300,19 @@ void StartMemSpansConfigWatcherThread(const std::string &path) {
             sleep(MEM_SPANS_CONFIG_POLLING_INTERVAL);
         }
 #pragma clang diagnostic pop
+    }).detach();
+}
+
+void StartMemDumpingThread(Emulator &emulator) {
+    std::thread([&]() {
+        std::fstream out("mem", std::ios::binary | std::ios::out);
+        while (true) {
+            auto ram = BatteryBackedRAM::rom_addr;
+            out.seekp(0, std::ios::beg);
+            out.write(ram, MEM_EDIT_MEM_SIZE);
+            out.flush();
+
+            sleep(1);
+        }
     }).detach();
 }
