@@ -316,7 +316,7 @@ void StartMemDumpingThread(Emulator &emulator) {
             out_text.seekp(0, std::ios::beg);
             for (size_t i = 0; i < MEM_EDIT_MEM_SIZE; ++i) {
                 char hex[3];
-                sprintf(hex, "%02X", ram[i]);
+                sprintf(hex, "%02X", (uint8_t) ram[i]);
                 hex[2] = ' ';
                 out_text.write(hex, 3);
                 if ((i + 1) % 8 == 0) {
