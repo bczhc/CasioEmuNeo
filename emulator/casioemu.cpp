@@ -2,6 +2,8 @@
 #include "Config/Config.hpp"
 #include "Gui/imgui_impl_sdl2.h"
 #include "Gui/Ui.hpp"
+#include "SDL_stdinc.h"
+#include "SDL_thread.h"
 #include "SDL_timer.h"
 #include "utils.h"
 
@@ -40,6 +42,20 @@ using namespace casioemu;
 void StartMemSpansConfigWatcherThread(const std::string &path);
 
 void StartMemDumpingThread(casioemu::Emulator &emulator);
+
+
+
+int imgui_rendering(void* data){
+	DebugUi *ui = (DebugUi*)data;
+	SDL_Event event;
+	SDL_zero(event);
+	event.type = SDL_USEREVENT;
+	event.user.code = 6;
+	while (true) {
+		ui->PaintUi();
+		SDL_Delay(16);
+	}
+}
 
 // #define DEBUG
 int main(int argc, char *argv[])
@@ -93,7 +109,7 @@ int main(int argc, char *argv[])
 
 	if (!history_filename.empty())
 	{
-
+		
 	}
 
     for (auto s: {SIGTERM, SIGINT}) {
@@ -101,13 +117,11 @@ int main(int argc, char *argv[])
             abort_flag = true;
         });
     }
-
-
 	// while(1)
 	// 	;
 	{
 		Emulator emulator(argv_map);
-
+		
 		// Note: argv_map must be destructed after emulator.
 
         // start colored spans file watcher thread
@@ -118,72 +132,18 @@ int main(int argc, char *argv[])
 		// Used to signal to the console input thread when to stop.
 		static std::atomic<bool> running(true);
 
-		// std::thread console_input_thread([&] {
-		// 	struct terminate_thread {};
-
-		// 	while (1)
-		// 	{
-		// 		char *console_input_c_str;
-
-		// 		if (console_input_c_str == NULL)
-		// 		{
-		// 			if(argv_map.find("exit_on_console_shutdown") != argv_map.end())
-		// 			{
-		// 				SDL_Event event;
-		// 				SDL_zero(event);
-		// 				event.type = SDL_WINDOWEVENT;
-		// 				event.window.event = SDL_WINDOWEVENT_CLOSE;
-		// 				SDL_PushEvent(&event);
-		// 			}
-		// 			else
-		// 			{
-		// 				logger::Info("Console thread shutting down\n");
-		// 			}
-
-		// 			break;
-		// 		}
-
-		// 		// Ignore empty lines.
-		// 		if (console_input_c_str[0] == 0)
-		// 			continue;
-
-
-		// 		std::lock_guard<decltype(emulator.access_mx)> access_lock(emulator.access_mx);
-		// 		if (!emulator.Running())
-		// 			break;
-		// 		emulator.ExecuteCommand(console_input_c_str);
-		// 		free(console_input_c_str);
-
-		// 		if (!emulator.Running())
-		// 		{
-		// 			SDL_Event event;
-		// 			SDL_zero(event);
-		// 			event.type = SDL_USEREVENT;
-		// 			event.user.code = CE_EMU_STOPPED;
-		// 			SDL_PushEvent(&event);
-		// 			return;
-		// 		}
-		// 	}
-		// });
 		DebugUi ui;
 
-		std::thread uit([&]{
-			while (true) {
-				ui.PaintUi();
-				ui.PaintSDL();
-				std::this_thread::sleep_for(std::chrono::milliseconds(16));
-			}
-
-		});
-		uit.detach();
+		SDL_Thread *uit = SDL_CreateThread(imgui_rendering, "uithread", &ui);
 
 		while (emulator.Running())
 		{
 			//std::cout<<SDL_GetMouseFocus()<<","<<emulator.window<<std::endl;
 			SDL_Event event;
+			ui.PaintSDL();
 			if (!SDL_PollEvent(&event))
 				continue;
-			// ui.PaintSDL();
+
             if (abort_flag) {
                 abort_flag = false;
                 SDL_Event ev_exit;
@@ -192,7 +152,7 @@ int main(int argc, char *argv[])
                 ev_exit.window.event = SDL_WINDOWEVENT_CLOSE;
                 SDL_PushEvent(&ev_exit);
             }
-
+			//ui.PaintSDL();
 			switch (event.type)
 			{
 			case SDL_USEREVENT:
@@ -200,17 +160,16 @@ int main(int argc, char *argv[])
 				{
 				case CE_FRAME_REQUEST:
 					emulator.Frame();
-
+					
 					break;
 				case CE_EMU_STOPPED:
 					if (emulator.Running())
 						PANIC("CE_EMU_STOPPED event received while emulator is still running\n");
 					break;
+
 				}
 				break;
-
 			case SDL_WINDOWEVENT:
-				ui.PaintSDL();
 				switch (event.window.event)
 				{
 				case SDL_WINDOWEVENT_CLOSE:
@@ -223,7 +182,7 @@ int main(int argc, char *argv[])
 					 	// send resized event, but some still does (such as xmonad)
 					 	break;
 					 }
-
+					
 					//ImGui_ImplSDL2_ProcessEvent(&event);
 					if(event.window.windowID == SDL_GetWindowID(emulator.window)){
 					emulator.WindowResize(event.window.data1, event.window.data2);
@@ -245,31 +204,32 @@ int main(int argc, char *argv[])
 				if(SDL_GetKeyboardFocus()!=emulator.window && SDL_GetMouseFocus()!=emulator.window)
 				{
 					ImGui_ImplSDL2_ProcessEvent(&event);
+					//ui.PaintSDL();
 					break;
 				}
 				emulator.UIEvent(event);
-
+				
 				break;
 			}
+			
 
-
-
+		
 		}
-
+		
 		running = false;
 
-
+		
 		//console_input_thread.join();
 	}
 
 	std::cout << '\n';
-
+	
 	IMG_Quit();
 	SDL_Quit();
-
+	
 	if (!history_filename.empty())
 	{
-
+		
 	}
 
 	return 0;
