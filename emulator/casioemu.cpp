@@ -53,6 +53,7 @@ int imgui_rendering(void* data){
 	event.user.code = 6;
 	while (true) {
 		ui->PaintUi();
+        ui->PaintSDL();
 		SDL_Delay(16);
 	}
 }
@@ -140,7 +141,6 @@ int main(int argc, char *argv[])
 		{
 			//std::cout<<SDL_GetMouseFocus()<<","<<emulator.window<<std::endl;
 			SDL_Event event;
-			ui.PaintSDL();
 			if (!SDL_PollEvent(&event))
 				continue;
 
